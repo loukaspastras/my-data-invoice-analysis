@@ -15,6 +15,9 @@ invoices_*.xlsx
 *.xls
 *.csv
 
+# Real customer invoices used for local testing (contain counterparty PII)
+test_invoices/
+
 # ============================================================
 # Python
 # ============================================================
@@ -25,6 +28,7 @@ __pycache__/
 venv/
 env/
 .python-version
+.pytest_cache/
 
 # ============================================================
 # OS / Editor
