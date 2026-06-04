@@ -1,6 +1,5 @@
 """Tab 1: Invoice Parser — bulk API fetch + PDF enrichment + Excel export."""
 
-import io
 from datetime import datetime
 
 import streamlit as st
@@ -8,6 +7,9 @@ import pandas as pd
 
 from ..api import fetch_all_invoices_bulk
 from ..processing import process_pdf_with_cached_data
+from ..excel_export import dataframe_to_xlsx
+
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def render_parser_tab():
@@ -98,23 +100,15 @@ def render_parser_tab():
                 df = pd.DataFrame(st.session_state['all_rows'])
                 st.dataframe(df, use_container_width=True)
 
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False)
-
-                st.download_button("📥 Κατέβασμα Excel", output.getvalue(),
+                st.download_button("📥 Κατέβασμα Excel", dataframe_to_xlsx(df),
                                  f"invoices_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                                 use_container_width=True)
+                                 mime=XLSX_MIME, use_container_width=True)
 
     elif st.session_state['all_rows']:
         st.subheader("📊 Προηγούμενα Αποτελέσματα")
         df = pd.DataFrame(st.session_state['all_rows'])
         st.dataframe(df, use_container_width=True)
 
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False)
-
-        st.download_button("📥 Κατέβασμα Excel", output.getvalue(),
+        st.download_button("📥 Κατέβασμα Excel", dataframe_to_xlsx(df),
                          f"invoices_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                         use_container_width=True)
+                         mime=XLSX_MIME, use_container_width=True)

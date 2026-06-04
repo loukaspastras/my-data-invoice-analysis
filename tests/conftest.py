@@ -76,11 +76,23 @@ def invoice_dir():
 
 @pytest.fixture
 def sample():
-    """Hand-verified ground truth for one invoice, loaded from the gitignored
-    fixture. Skips the test when the fixture or its PDF is unavailable."""
+    """Hand-verified ground truth for one sales invoice, loaded from the
+    gitignored fixture. Skips the test when the fixture or its PDF is missing."""
     if not EXPECTED:
         pytest.skip("requires gitignored test_invoices/expected.json")
     pdf_path = INVOICE_DIR / EXPECTED["sample_pdf"]
     if not pdf_path.exists():
         pytest.skip("requires gitignored sample invoice PDF")
     return {**EXPECTED, "pdf_path": pdf_path}
+
+
+@pytest.fixture
+def credit_sample():
+    """Hand-verified ground truth for one credit note (Πιστωτικό, type 5.x)."""
+    if not EXPECTED or "credit_note" not in EXPECTED:
+        pytest.skip("requires gitignored credit-note fixture")
+    cn = EXPECTED["credit_note"]
+    pdf_path = INVOICE_DIR / cn["sample_pdf"]
+    if not pdf_path.exists():
+        pytest.skip("requires gitignored credit-note PDF")
+    return {**cn, "pdf_path": pdf_path}

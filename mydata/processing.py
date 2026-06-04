@@ -275,6 +275,26 @@ def process_pdf_with_cached_data(f, acc_name, invoices_cache, status_container=N
             if expanded_desc != original_desc:
                 pdf_enrichment[l_no]['desc'] = expanded_desc
 
+    # ── Document-level fields from the API header (authoritative source) ──
+    header = inv.get('invoiceHeader', {}) or {}
+    series = header.get('series', '') or ''
+    aa = header.get('aa', '') or ''
+    invoice_type = str(header.get('invoiceType', '') or '')
+    issue_date = header.get('issueDate', '') or ''
+
+    # Credit notes (Πιστωτικά: invoiceType 5.x) reverse a sale. We classify ONLY
+    # from the API invoiceType — never from PDF text — and negate every numeric
+    # value, so totals net out correctly when aggregated.
+    is_credit = invoice_type.startswith('5')
+    sign = -1 if is_credit else 1
+
+    def _signed_qty(raw):
+        try:
+            q = sign * float(raw)
+            return int(q) if q == int(q) else q
+        except (TypeError, ValueError):
+            return raw  # non-numeric / missing quantity passes through unchanged
+
     # Build final results: API data LEFT JOIN PDF enrichment
     final_results = []
     for i, api_line in enumerate(api_details):
@@ -283,18 +303,24 @@ def process_pdf_with_cached_data(f, acc_name, invoices_cache, status_container=N
         # Get PDF enrichment if available
         enrichment = pdf_enrichment.get(l_no, {})
 
+        net = sign * float(api_line.get('netValue', 0))
+        vat = sign * float(api_line.get('vatAmount', 0))
+
         final_results.append({
             'Επιχείρηση': acc_name,
             'Αρχείο': f.name,
             'MARK': mark,
-            'Ημερομηνία': inv.get('invoiceHeader', {}).get('issueDate', ''),
+            'Σειρά': series,
+            'Α/Α': aa,
+            'Τύπος': invoice_type,
+            'Ημερομηνία': issue_date,
             'Γραμμή': l_no,
             'Κωδικός': enrichment.get('code', '') or '',
             'Περιγραφή': enrichment.get('desc', '') or '',
-            'Ποσότητα': api_line.get('quantity', ''),
-            'Καθαρή Αξία': float(api_line.get('netValue', 0)),
-            'ΦΠΑ': float(api_line.get('vatAmount', 0)),
-            'Σύνολο': float(api_line.get('netValue', 0)) + float(api_line.get('vatAmount', 0))
+            'Ποσότητα': _signed_qty(api_line.get('quantity', '')),
+            'Καθαρή Αξία': net,
+            'ΦΠΑ': vat,
+            'Σύνολο': net + vat
         })
 
     if status_container:

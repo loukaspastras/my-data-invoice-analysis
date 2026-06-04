@@ -22,22 +22,32 @@ from conftest import all_invoice_paths, mark_from_filename, load_as_upload
 
 @pytest.mark.parametrize("pdf_path", all_invoice_paths(), ids=lambda p: p.name)
 def test_extract_mark_matches_filename(pdf_path):
+    # Must return the document's OWN MARK for every invoice — including credit
+    # notes, whose Συσχετιζόμενο (related) MARK must NOT be returned.
     expected = mark_from_filename(pdf_path)
     assert expected is not None, "filename should contain a 15-digit MARK"
     got = extract_mark_from_pdf(load_as_upload(pdf_path))
+    assert got == expected
 
-    if got != expected:
-        # KNOWN PRE-EXISTING BUG (preserved verbatim from the original app):
-        # credit notes (Πιστωτικό Τιμολόγιο) carry a "Συσχετιζόμενο: <MARK>"
-        # line — the related original-invoice MARK — which appears in the text
-        # BEFORE the document's own MARK. extract_mark_from_pdf takes the first
-        # 15-digit run and therefore returns the related MARK, not the own MARK.
+
+def test_credit_note_returns_own_mark_not_correlated():
+    """On a credit note, the Συσχετιζόμενο MARK must never be returned."""
+    import re
+    for pdf_path in all_invoice_paths():
         with pdfplumber.open(pdf_path) as pdf:
             text = pdf.pages[0].extract_text() or ""
-        if "Συσχετιζόμενο" in text:
-            pytest.xfail("credit-note related-MARK precedes own MARK (pre-existing extract_mark bug)")
-
-    assert got == expected
+        if "Συσχετιζόμενο" not in text:
+            continue
+        m = re.search(r'Συσχετιζόμεν\w*\D{0,10}(\d{15})', text)
+        if not m:
+            continue
+        correlated = m.group(1)
+        own = mark_from_filename(pdf_path)
+        got = extract_mark_from_pdf(load_as_upload(pdf_path))
+        assert got == own, f"{pdf_path.name}: expected own MARK {own}, got {got}"
+        assert got != correlated, f"{pdf_path.name}: returned the Συσχετιζόμενο MARK {correlated}"
+        return  # one real credit note is enough to prove the behaviour
+    pytest.skip("no credit-note PDF available (gitignored test_invoices/)")
 
 
 def test_extract_mark_on_non_pdf_returns_none():

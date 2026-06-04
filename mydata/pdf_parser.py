@@ -10,9 +10,19 @@ import pdfplumber
 
 
 def extract_mark_from_pdf(pdf_file):
+    """Extract the document's OWN 15-digit MARK from page 1.
+
+    Credit notes (Πιστωτικά) print a "Συσχετιζόμενο: <MARK>" line — the related
+    original-invoice MARK — BEFORE the document's own MARK in the text. That
+    related MARK belongs to a real invoice (often in the same batch), so naively
+    taking the first 15-digit run would resolve to the WRONG document. We strip
+    the Συσχετιζόμενο MARK first so only the document's own MARK can be returned.
+    """
     try:
         with pdfplumber.open(pdf_file) as pdf:
-            text = pdf.pages[0].extract_text()
+            text = pdf.pages[0].extract_text() or ""
+        # Remove the correlated/related MARK (credit notes) before searching.
+        text = re.sub(r'Συσχετιζόμεν\w*\D{0,10}\d{15}', ' ', text)
         mark_match = re.search(r'\d{15}', text)
         return mark_match.group(0) if mark_match else None
     except: return None
