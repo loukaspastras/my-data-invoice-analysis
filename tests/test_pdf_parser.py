@@ -13,7 +13,7 @@ from mydata.pdf_parser import (
     find_line_in_page,
     DEFAULT_COLUMNS,
 )
-from conftest import all_invoice_paths, mark_from_filename, load_as_upload, SAMPLE_PDF
+from conftest import all_invoice_paths, mark_from_filename, load_as_upload
 
 
 # ------------------------------------------------------------------
@@ -75,14 +75,14 @@ def test_group_words_by_row_sorts_each_row_by_x():
 
 
 # ------------------------------------------------------------------
-# normalize_number
+# normalize_number  (synthetic values — not tied to any invoice)
 # ------------------------------------------------------------------
 
 @pytest.mark.parametrize("value,expected_contains", [
-    ("234,60", ["234,60", "234.60"]),
-    (234.60, ["234,60", "234.60"]),
-    ("3", ["3,00", "3.00", "3"]),      # integer also yields bare int variant
-    (3.0, ["3,00", "3.00", "3"]),
+    ("1234,56", ["1234,56", "1234.56"]),
+    (1234.56, ["1234,56", "1234.56"]),
+    ("7", ["7,00", "7.00", "7"]),      # integer also yields bare int variant
+    (7.0, ["7,00", "7.00", "7"]),
 ])
 def test_normalize_number_variants(value, expected_contains):
     variants = normalize_number(value)
@@ -98,13 +98,13 @@ def test_normalize_number_non_numeric_passthrough():
 # find_header_columns — real header on the sample invoice
 # ------------------------------------------------------------------
 
-def _sample_words():
-    with pdfplumber.open(SAMPLE_PDF) as pdf:
+def _words(pdf_path):
+    with pdfplumber.open(pdf_path) as pdf:
         return pdf.pages[0].extract_words()
 
 
-def test_find_header_columns_detects_table_columns():
-    cols = find_header_columns(_sample_words())
+def test_find_header_columns_detects_table_columns(sample):
+    cols = find_header_columns(_words(sample["pdf_path"]))
     # the four columns the parser actually relies on
     for key in ("aa", "code", "desc", "qty"):
         assert key in cols, f"missing column {key}"
@@ -116,21 +116,22 @@ def test_find_header_columns_detects_table_columns():
 # find_line_in_page — locate line 1 on the sample invoice
 # ------------------------------------------------------------------
 
-def test_find_line_in_page_extracts_code_and_desc():
-    words = _sample_words()
+def test_find_line_in_page_extracts_code_and_desc(sample):
+    words = _words(sample["pdf_path"])
     rows = group_words_by_row(words)
     cols = find_header_columns(words)
-    api_line = {"quantity": "340", "netValue": "234.60", "vatAmount": "56.30"}
+    line = sample["line"]
+    api_line = {"quantity": line["quantity"], "netValue": line["netValue"], "vatAmount": line["vatAmount"]}
 
-    code, desc, y = find_line_in_page(rows, cols, api_line, 1, set(), set())
+    code, desc, y = find_line_in_page(rows, cols, api_line, int(line["lineNumber"]), set(), set())
 
-    assert code == "MAT.198401"
-    assert "Cleveland" in desc          # the main-row description fragment
+    assert code == line["code"]
+    assert any(tok in desc for tok in line["desc_tokens"])  # main-row description fragment
     assert y is not None
 
 
-def test_find_line_in_page_missing_line_returns_none():
-    words = _sample_words()
+def test_find_line_in_page_missing_line_returns_none(sample):
+    words = _words(sample["pdf_path"])
     rows = group_words_by_row(words)
     cols = find_header_columns(words)
     # line 99 does not exist on this single-line invoice
