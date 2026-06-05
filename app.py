@@ -9,6 +9,7 @@ Launched by ΕΚΚΙΝΗΣΗ.bat via: streamlit run app.py
 
 import streamlit as st
 
+from mydata.costing import load_cost_db
 from mydata.ui.sidebar import render_sidebar
 from mydata.ui.parser_tab import render_parser_tab
 from mydata.ui.analytics_tab import render_analytics_tab
@@ -31,6 +32,9 @@ if 'all_rows' not in st.session_state:
     st.session_state['all_rows'] = []
 if 'errors' not in st.session_state:
     st.session_state['errors'] = []
+if 'cost_table' not in st.session_state:
+    # Load the persisted cost-of-goods table (database/) into memory; None if absent.
+    st.session_state['cost_table'] = load_cost_db()
 
 # ============================================================
 # SIDEBAR (common for all tabs)

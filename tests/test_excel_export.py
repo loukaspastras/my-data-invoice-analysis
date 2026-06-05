@@ -13,19 +13,20 @@ from openpyxl.utils import get_column_letter
 from mydata.excel_export import dataframe_to_xlsx
 
 COLUMNS = ['Επιχείρηση', 'Αρχείο', 'MARK', 'Σειρά', 'Α/Α', 'Τύπος', 'Ημερομηνία',
-           'Γραμμή', 'Κωδικός', 'Περιγραφή', 'Ποσότητα', 'Καθαρή Αξία', 'ΦΠΑ', 'Σύνολο']
+           'Γραμμή', 'Κωδικός', 'Περιγραφή', 'Ποσότητα', 'Καθαρή Αξία', 'ΦΠΑ', 'Σύνολο',
+           'Τιμή Κτήσης', 'Καθαρό Κέρδος']
 
 FAKE_MARK = '123456789012345'   # synthetic 15-digit id
 
 
 def _df():
     rows = [
-        # a sale (positive)
+        # a sale (positive): profit 100.00 - 0.10*10 = 99.00
         ['ACME', 'a.pdf', FAKE_MARK, 'SER', '1', '1.1', '2026-01-02',
-         1, 'SKU.001', 'Widget', 10, 100.00, 24.00, 124.00],
-        # a credit note (negated, invoiceType 5.x)
+         1, 'SKU.001', 'Widget', 10, 100.00, 24.00, 124.00, 0.10, 99.00],
+        # a credit note (negated): profit -50.00 - 2.45*(-4) = -40.20
         ['ACME', 'b.pdf', '123456789012999', 'CRD', '2', '5.1', '2026-01-03',
-         1, 'SKU.002', 'Returned widget', -4, -50.00, -12.00, -62.00],
+         1, 'SKU.002', 'Returned widget', -4, -50.00, -12.00, -62.00, 2.45, -40.20],
     ]
     return pd.DataFrame(rows, columns=COLUMNS)
 
@@ -79,6 +80,25 @@ def test_totals_row_sums_and_nets_out():
     assert ws.cell(tr, net_col).value == f"=SUM({L}2:{L}3)"
     # numeric net-out: 100.00 + (-50.00) = 50.00
     assert round(_df()['Καθαρή Αξία'].sum(), 2) == 50.00
+
+
+def test_profit_is_money_and_summed_in_totals():
+    ws = _load(dataframe_to_xlsx(_df())).active
+    tr = ws.max_row
+    pc = COLUMNS.index('Καθαρό Κέρδος') + 1
+    assert '€' in ws.cell(2, pc).number_format
+    assert ws.cell(3, pc).value == -40.20                      # stays negative
+    L = get_column_letter(pc)
+    assert ws.cell(tr, pc).value == f"=SUM({L}2:{L}3)"         # total profit
+
+
+def test_unit_cost_is_unit_format_and_not_summed():
+    ws = _load(dataframe_to_xlsx(_df())).active
+    tr = ws.max_row
+    uc = COLUMNS.index('Τιμή Κτήσης') + 1
+    assert ws.cell(2, uc).value == 0.10
+    assert ws.cell(2, uc).number_format.count('0') >= 5         # extra decimals
+    assert ws.cell(tr, uc).value is None                        # NOT summed
 
 
 def test_empty_dataframe_does_not_crash():

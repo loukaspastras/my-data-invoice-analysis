@@ -1,5 +1,6 @@
 """Tab 1: Invoice Parser — bulk API fetch + PDF enrichment + Excel export."""
 
+import io
 from datetime import datetime
 
 import streamlit as st
@@ -8,8 +9,60 @@ import pandas as pd
 from ..api import fetch_all_invoices_bulk
 from ..processing import process_pdf_with_cached_data
 from ..excel_export import dataframe_to_xlsx
+from ..costing import parse_cost_table, save_cost_db, join_costs
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+NO_COST_WARNING = ("⚠️ Δεν μου έχεις δώσει τις Τιμές Κτήσης. Κάνε upload το αρχείο "
+                   "αν θες να υπολογίσουμε καθαρά κέρδη.")
+
+
+def _render_cost_section():
+    """Upload / replace the cost-of-goods table used to compute profit."""
+    st.markdown("#### 💰 Τιμές Κτήσης (για υπολογισμό κέρδους)")
+
+    cost_map = st.session_state.get('cost_table')
+    if cost_map:
+        st.success(f"✅ Φορτωμένες Τιμές Κτήσης: {len(cost_map)} κωδικοί")
+    else:
+        st.warning(NO_COST_WARNING)
+
+    up = st.file_uploader(
+        "📤 Αρχείο Τιμών Κτήσης (.xlsx με στήλες «ΚΩΔΙΚΟΣ» και «ΤΙΜΗ ΚΤΗΣΗΣ»)",
+        type=['xlsx'], key='cost_upload')
+
+    if up is not None:
+        sig = (up.name, up.size)
+        if st.session_state.get('_cost_sig') != sig:   # process each upload once
+            data = up.getvalue()
+            cost_map, err, info = parse_cost_table(io.BytesIO(data))
+            if err:
+                st.error(err)
+            else:
+                save_cost_db(data)                      # replace the database file
+                st.session_state['cost_table'] = cost_map
+                st.session_state['_cost_sig'] = sig
+                msg = f"✅ Αποθηκεύτηκαν {info['count']} κωδικοί τιμών κτήσης."
+                if info.get('duplicates'):
+                    msg += (" Διπλοί κωδικοί (κράτησα τον τελευταίο): "
+                            + ", ".join(info['duplicates']) + ".")
+                if info.get('invalid_rows'):
+                    msg += f" Αγνοήθηκαν {info['invalid_rows']} γραμμές χωρίς αριθμητική τιμή."
+                st.success(msg)
+                st.rerun()
+
+
+def _enrich_and_warn(df):
+    """Join cost prices onto the export df (if available) and surface warnings."""
+    cost_map = st.session_state.get('cost_table')
+    if not cost_map:
+        st.warning(NO_COST_WARNING)
+        return df
+    df, unmatched = join_costs(df, cost_map)
+    if unmatched:
+        st.warning("⚠️ Οι παρακάτω κωδικοί δεν βρέθηκαν στις Τιμές Κτήσης "
+                   "(έμειναν χωρίς κόστος/κέρδος): " + ", ".join(unmatched))
+    return df
 
 
 def render_parser_tab():
@@ -23,6 +76,10 @@ def render_parser_tab():
         3. **Πατήστε Έναρξη** - το app κατεβάζει ΟΛΑ τα invoices με 1 κλήση
         4. **Κατεβάστε Excel** με τα αποτελέσματα
         """)
+
+    st.divider()
+
+    _render_cost_section()
 
     st.divider()
 
@@ -98,6 +155,7 @@ def render_parser_tab():
 
             if st.session_state['all_rows']:
                 df = pd.DataFrame(st.session_state['all_rows'])
+                df = _enrich_and_warn(df)
                 st.dataframe(df, use_container_width=True)
 
                 st.download_button("📥 Κατέβασμα Excel", dataframe_to_xlsx(df),
@@ -107,6 +165,7 @@ def render_parser_tab():
     elif st.session_state['all_rows']:
         st.subheader("📊 Προηγούμενα Αποτελέσματα")
         df = pd.DataFrame(st.session_state['all_rows'])
+        df = _enrich_and_warn(df)
         st.dataframe(df, use_container_width=True)
 
         st.download_button("📥 Κατέβασμα Excel", dataframe_to_xlsx(df),

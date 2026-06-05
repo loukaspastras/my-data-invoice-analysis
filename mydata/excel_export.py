@@ -17,11 +17,15 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 # Columns that must stay textual (IDs / codes — never numbers or dates).
 TEXT_COLS = ("MARK", "Σειρά", "Α/Α", "Τύπος", "Κωδικός")
 DATE_COLS = ("Ημερομηνία",)
-MONEY_COLS = ("Καθαρή Αξία", "ΦΠΑ", "Σύνολο")
+# Money columns: 2-decimal €, right-aligned, summed in the totals row.
+MONEY_COLS = ("Καθαρή Αξία", "ΦΠΑ", "Σύνολο", "Καθαρό Κέρδος")
+# Unit prices: more decimals, right-aligned, NOT summed (a per-unit value).
+UNIT_PRICE_COLS = ("Τιμή Κτήσης",)
 QTY_COLS = ("Ποσότητα",)
 CENTER_INT_COLS = ("Γραμμή",)
 
 MONEY_FMT = '#,##0.00" €";[Red]-#,##0.00" €"'
+UNIT_FMT = '#,##0.0000" €";[Red]-#,##0.0000" €"'
 QTY_FMT = '#,##0.##;[Red]-#,##0.##'
 WIDTH_CAPS = {"Περιγραφή": 55, "Αρχείο": 40}
 
@@ -61,6 +65,11 @@ def dataframe_to_xlsx(df, sheet_name="Τιμολόγια"):
         if c in idx:
             for cell in cells(c):
                 cell.number_format = MONEY_FMT
+                cell.alignment = Alignment(horizontal="right")
+    for c in UNIT_PRICE_COLS:
+        if c in idx:
+            for cell in cells(c):
+                cell.number_format = UNIT_FMT
                 cell.alignment = Alignment(horizontal="right")
     for c in QTY_COLS:
         if c in idx:

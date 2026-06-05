@@ -18,6 +18,9 @@ invoices_*.xlsx
 # Real customer invoices used for local testing (contain counterparty PII)
 test_invoices/
 
+# Local cost-of-goods database (real business data)
+database/
+
 # ============================================================
 # Python
 # ============================================================
