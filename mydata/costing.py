@@ -29,7 +29,7 @@ COL_PROFIT = "Καθαρό Κέρδος"
 
 def normalize_sku(value):
     """Normalize a SKU for joining: NFKC, trim, collapse inner spaces, drop dots,
-    uppercase. Dropping dots makes e.g. 'MAT214041' match 'MAT.214041'."""
+    uppercase. Dropping dots makes e.g. 'ABC123' match 'ABC.123'."""
     if value is None:
         return ""
     if isinstance(value, float) and value.is_integer():

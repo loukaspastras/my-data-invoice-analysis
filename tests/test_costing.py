@@ -18,8 +18,8 @@ def _write_cost_xlsx(path, rows, headers=("ΚΩΔΙΚΟΣ", "ΠΕΡΙΓΡΑΦΗ"
 @pytest.mark.parametrize("raw,expected", [
     ("  abc.001 ", "ABC001"),        # trim + dot removed + upper
     ("abc.001", "ABC001"),
-    ("MAT214041", "MAT214041"),      # already dot-free
-    ("MAT.214041", "MAT214041"),     # dot stripped -> equals the dot-free form
+    ("ABC123", "ABC123"),            # already dot-free
+    ("ABC.123", "ABC123"),           # dot stripped -> equals the dot-free form
     ("XY 0001", "XY 0001"),          # inner single space preserved
     ("XY   0001", "XY 0001"),        # collapsed
     (123456.0, "123456"),            # numeric cell -> no '.0'
@@ -31,7 +31,7 @@ def test_normalize_sku(raw, expected):
 
 
 def test_normalize_makes_dotted_and_undotted_equal():
-    assert normalize_sku("MAT.214041") == normalize_sku("mat214041")
+    assert normalize_sku("ABC.123") == normalize_sku("abc123")
 
 
 # --------------------------------------------------------------- parse table
@@ -121,9 +121,9 @@ def test_join_blank_sku_not_in_unmatched():
 
 
 def test_join_matches_across_dot_space_case():
-    # invoice 'mat.214041' (dotted/lower) must match cost key 'MAT214041'
-    df = _invoice_df([["  mat.214041 ", 10, 100.0]])
-    out, unmatched = join_costs(df, {"MAT214041": 1.0})
+    # invoice 'abc.123' (dotted/lower/padded) must match cost key 'ABC123'
+    df = _invoice_df([["  abc.123 ", 10, 100.0]])
+    out, unmatched = join_costs(df, {"ABC123": 1.0})
     assert unmatched == []
     assert out[COL_LINE_COST].iloc[0] == round(1.0 * 10, 2)
     assert out[COL_PROFIT].iloc[0] == round(100.0 - 1.0 * 10, 2)
