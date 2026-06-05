@@ -3,11 +3,11 @@
 The cost table is a persistent Excel under database/ (gitignored — real business
 data). Schema: ΚΩΔΙΚΟΣ, ΤΙΜΗ ΚΤΗΣΗΣ (ΠΕΡΙΓΡΑΦΗ optional).
 
-    Τιμή Κτήσης  = unit cost looked up by SKU
-    Καθαρό Κέρδος = Καθαρή Αξία − (Τιμή Κτήσης × Ποσότητα)
+    Τιμή Κτήσης (χ Ποσότητα) = unit cost × Ποσότητα (total acquisition cost of the line)
+    Καθαρό Κέρδος            = Καθαρή Αξία − Τιμή Κτήσης (χ Ποσότητα)
 
-Because Ποσότητα is already negative for Πιστωτικά, returns subtract profit back
-out automatically — no special casing.
+Because Ποσότητα is already negative for Πιστωτικά, returns subtract both cost and
+profit back out automatically — no special casing.
 """
 
 import os
@@ -23,7 +23,7 @@ SKU_HEADER = "ΚΩΔΙΚΟΣ"
 COST_HEADER = "ΤΙΜΗ ΚΤΗΣΗΣ"
 
 # Output column names added to the export.
-COL_UNIT_COST = "Τιμή Κτήσης"
+COL_LINE_COST = "Τιμή Κτήσης (χ Ποσότητα)"   # unit cost × quantity sold/returned
 COL_PROFIT = "Καθαρό Κέρδος"
 
 
@@ -112,7 +112,7 @@ def join_costs(df, cost_map):
     of non-empty SKUs in df that had no match in the cost table.
     """
     df = df.copy()
-    unit_costs, profits = [], []
+    line_costs, profits = [], []
     unmatched = set()
 
     for _, row in df.iterrows():
@@ -120,21 +120,22 @@ def join_costs(df, cost_map):
         key = normalize_sku(raw)
         unit = cost_map.get(key) if key else None
 
+        cost = profit = None
         if unit is None:
-            unit_costs.append(None)
-            profits.append(None)
             if key:                      # has a SKU but no cost match
                 unmatched.add(str(raw).strip())
-            continue
+        else:
+            try:
+                qty = float(row.get("Ποσότητα", 0) or 0)
+                net = float(row.get("Καθαρή Αξία", 0) or 0)
+                cost = round(unit * qty, 2)          # unit cost × quantity
+                profit = round(net - cost, 2)        # reconciles with the column
+            except (TypeError, ValueError):
+                cost = profit = None
 
-        unit_costs.append(unit)
-        try:
-            qty = float(row.get("Ποσότητα", 0) or 0)
-            net = float(row.get("Καθαρή Αξία", 0) or 0)
-            profits.append(round(net - unit * qty, 2))
-        except (TypeError, ValueError):
-            profits.append(None)
+        line_costs.append(cost)
+        profits.append(profit)
 
-    df[COL_UNIT_COST] = unit_costs
+    df[COL_LINE_COST] = line_costs
     df[COL_PROFIT] = profits
     return df, sorted(unmatched)

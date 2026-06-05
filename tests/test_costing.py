@@ -5,7 +5,7 @@ import pytest
 
 from mydata.costing import (
     normalize_sku, parse_cost_table, join_costs, load_cost_db, save_cost_db,
-    COL_UNIT_COST, COL_PROFIT,
+    COL_LINE_COST, COL_PROFIT,
 )
 
 
@@ -87,14 +87,15 @@ def test_join_sale_profit():
     df = _invoice_df([["ABC.001", 340, 234.60]])
     out, unmatched = join_costs(df, {"ABC.001": 0.10})
     assert unmatched == []
-    assert out[COL_UNIT_COST].iloc[0] == 0.10
+    assert out[COL_LINE_COST].iloc[0] == round(0.10 * 340, 2)         # 34.00
     assert out[COL_PROFIT].iloc[0] == round(234.60 - 0.10 * 340, 2)   # 200.60
 
 
-def test_join_credit_note_profit_reverses():
-    # credit note: qty and net already negative -> profit reverses the sale's
+def test_join_credit_note_reverses():
+    # credit note: qty and net already negative -> cost and profit both reverse
     df = _invoice_df([["DEF.002", -2, -9.80]])
     out, _ = join_costs(df, {"DEF.002": 2.45})
+    assert out[COL_LINE_COST].iloc[0] == round(2.45 * -2, 2)          # -4.90
     assert out[COL_PROFIT].iloc[0] == round(-9.80 - 2.45 * (-2), 2)   # -4.90
 
 
@@ -102,7 +103,7 @@ def test_join_unmatched_sku_blank_and_warned():
     df = _invoice_df([["NOPE.1", 5, 50.0]])
     out, unmatched = join_costs(df, {"ABC.001": 0.10})
     assert unmatched == ["NOPE.1"]
-    assert pd.isna(out[COL_UNIT_COST].iloc[0])
+    assert pd.isna(out[COL_LINE_COST].iloc[0])
     assert pd.isna(out[COL_PROFIT].iloc[0])
 
 
@@ -110,7 +111,7 @@ def test_join_blank_sku_not_in_unmatched():
     df = _invoice_df([["", 1, 10.0]])
     out, unmatched = join_costs(df, {"ABC.001": 0.10})
     assert unmatched == []
-    assert pd.isna(out[COL_UNIT_COST].iloc[0])
+    assert pd.isna(out[COL_LINE_COST].iloc[0])
 
 
 def test_join_normalizes_before_matching():
