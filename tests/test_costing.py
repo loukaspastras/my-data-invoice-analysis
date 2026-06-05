@@ -16,8 +16,10 @@ def _write_cost_xlsx(path, rows, headers=("ΚΩΔΙΚΟΣ", "ΠΕΡΙΓΡΑΦΗ"
 
 # ------------------------------------------------------------------ normalize
 @pytest.mark.parametrize("raw,expected", [
-    ("  abc.001 ", "ABC.001"),
-    ("abc.001", "ABC.001"),
+    ("  abc.001 ", "ABC001"),        # trim + dot removed + upper
+    ("abc.001", "ABC001"),
+    ("MAT214041", "MAT214041"),      # already dot-free
+    ("MAT.214041", "MAT214041"),     # dot stripped -> equals the dot-free form
     ("XY 0001", "XY 0001"),          # inner single space preserved
     ("XY   0001", "XY 0001"),        # collapsed
     (123456.0, "123456"),            # numeric cell -> no '.0'
@@ -28,13 +30,17 @@ def test_normalize_sku(raw, expected):
     assert normalize_sku(raw) == expected
 
 
+def test_normalize_makes_dotted_and_undotted_equal():
+    assert normalize_sku("MAT.214041") == normalize_sku("mat214041")
+
+
 # --------------------------------------------------------------- parse table
 def test_parse_valid(tmp_path):
     p = _write_cost_xlsx(tmp_path / "c.xlsx",
                          [["ABC.001", "x", 0.10], ["DEF.002", "y", 2.45]])
     cost_map, err, info = parse_cost_table(p)
     assert err is None
-    assert cost_map == {"ABC.001": 0.10, "DEF.002": 2.45}
+    assert cost_map == {"ABC001": 0.10, "DEF002": 2.45}    # keys normalized (dots dropped)
     assert info["count"] == 2
 
 
@@ -84,8 +90,8 @@ def _invoice_df(rows):
 
 
 def test_join_sale_profit():
-    df = _invoice_df([["ABC.001", 340, 234.60]])
-    out, unmatched = join_costs(df, {"ABC.001": 0.10})
+    df = _invoice_df([["ABC001", 340, 234.60]])
+    out, unmatched = join_costs(df, {"ABC001": 0.10})
     assert unmatched == []
     assert out[COL_LINE_COST].iloc[0] == round(0.10 * 340, 2)         # 34.00
     assert out[COL_PROFIT].iloc[0] == round(234.60 - 0.10 * 340, 2)   # 200.60
@@ -93,31 +99,33 @@ def test_join_sale_profit():
 
 def test_join_credit_note_reverses():
     # credit note: qty and net already negative -> cost and profit both reverse
-    df = _invoice_df([["DEF.002", -2, -9.80]])
-    out, _ = join_costs(df, {"DEF.002": 2.45})
+    df = _invoice_df([["DEF002", -2, -9.80]])
+    out, _ = join_costs(df, {"DEF002": 2.45})
     assert out[COL_LINE_COST].iloc[0] == round(2.45 * -2, 2)          # -4.90
     assert out[COL_PROFIT].iloc[0] == round(-9.80 - 2.45 * (-2), 2)   # -4.90
 
 
 def test_join_unmatched_sku_blank_and_warned():
     df = _invoice_df([["NOPE.1", 5, 50.0]])
-    out, unmatched = join_costs(df, {"ABC.001": 0.10})
-    assert unmatched == ["NOPE.1"]
+    out, unmatched = join_costs(df, {"ABC001": 0.10})
+    assert unmatched == ["NOPE.1"]                  # original SKU shown in the warning
     assert pd.isna(out[COL_LINE_COST].iloc[0])
     assert pd.isna(out[COL_PROFIT].iloc[0])
 
 
 def test_join_blank_sku_not_in_unmatched():
     df = _invoice_df([["", 1, 10.0]])
-    out, unmatched = join_costs(df, {"ABC.001": 0.10})
+    out, unmatched = join_costs(df, {"ABC001": 0.10})
     assert unmatched == []
     assert pd.isna(out[COL_LINE_COST].iloc[0])
 
 
-def test_join_normalizes_before_matching():
-    df = _invoice_df([["  abc.001 ", 10, 100.0]])
-    out, unmatched = join_costs(df, {"ABC.001": 1.0})
+def test_join_matches_across_dot_space_case():
+    # invoice 'mat.214041' (dotted/lower) must match cost key 'MAT214041'
+    df = _invoice_df([["  mat.214041 ", 10, 100.0]])
+    out, unmatched = join_costs(df, {"MAT214041": 1.0})
     assert unmatched == []
+    assert out[COL_LINE_COST].iloc[0] == round(1.0 * 10, 2)
     assert out[COL_PROFIT].iloc[0] == round(100.0 - 1.0 * 10, 2)
 
 

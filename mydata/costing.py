@@ -28,13 +28,15 @@ COL_PROFIT = "Καθαρό Κέρδος"
 
 
 def normalize_sku(value):
-    """Normalize a SKU for joining: NFKC, trim, collapse inner spaces, uppercase."""
+    """Normalize a SKU for joining: NFKC, trim, collapse inner spaces, drop dots,
+    uppercase. Dropping dots makes e.g. 'MAT214041' match 'MAT.214041'."""
     if value is None:
         return ""
     if isinstance(value, float) and value.is_integer():
         value = int(value)          # avoid '198401.0' from numeric cells
     s = unicodedata.normalize("NFKC", str(value)).strip()
     s = re.sub(r"\s+", " ", s)
+    s = s.replace(".", "")
     return s.upper()
 
 
